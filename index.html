@@ -21,7 +21,6 @@
             overflow-x: hidden;
         }
 
-        /* Animated Background */
         .animated-bg {
             position: fixed;
             top: 0;
@@ -54,7 +53,6 @@
             z-index: 1;
         }
 
-        /* Header */
         header {
             background: rgba(26, 26, 46, 0.8);
             backdrop-filter: blur(20px);
@@ -101,7 +99,17 @@
             font-weight: 500;
         }
 
-        /* Admin Panel */
+        .sync-indicator {
+            display: inline-block;
+            padding: 8px 16px;
+            background: rgba(59, 165, 93, 0.2);
+            color: #3ba55d;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+            margin-top: 15px;
+        }
+
         .admin-panel {
             background: rgba(26, 26, 46, 0.6);
             backdrop-filter: blur(20px);
@@ -268,7 +276,6 @@
             grid-column: 1 / -1;
         }
 
-        /* Products Grid */
         .products-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
@@ -315,11 +322,6 @@
                 transform: translateY(0);
             }
         }
-
-        .product-card:nth-child(1) { animation-delay: 0.1s; }
-        .product-card:nth-child(2) { animation-delay: 0.2s; }
-        .product-card:nth-child(3) { animation-delay: 0.3s; }
-        .product-card:nth-child(4) { animation-delay: 0.4s; }
 
         .product-card:hover {
             transform: translateY(-10px) scale(1.02);
@@ -429,7 +431,6 @@
             width: 100%;
         }
 
-        /* Modal */
         .modal {
             display: none;
             position: fixed;
@@ -544,7 +545,6 @@
             opacity: 0.5;
         }
 
-        /* Responsive Design - Mobile */
         @media (max-width: 768px) {
             .logo {
                 font-size: 2.2em;
@@ -623,7 +623,6 @@
             }
         }
 
-        /* Responsive Design - Tablet */
         @media (min-width: 769px) and (max-width: 1024px) {
             .products-grid {
                 grid-template-columns: repeat(2, 1fr);
@@ -634,7 +633,6 @@
             }
         }
 
-        /* Responsive Design - Large Desktop */
         @media (min-width: 1400px) {
             .products-grid {
                 grid-template-columns: repeat(3, 1fr);
@@ -728,17 +726,46 @@
     <script>
         const ADMIN_PASSWORD = 'Admin-KN';
         let isAdmin = false;
-        let products = [
-            {
-                id: 1,
-                name: 'Discord Nitro 3 Mois',
-                price: 3.11,
-                description: 'Profitez de Discord Nitro pendant 3 mois avec tous les avantages premium. Livraison immédiate après vérification du paiement.',
-                stock: 25
-            }
-        ];
 
-        function toggleAdmin() {
+        // Fonction pour charger les produits depuis le stockage partagé
+        async function loadProducts() {
+            try {
+                const result = await window.storage.get('products', true);
+                if (result && result.value) {
+                    return JSON.parse(result.value);
+                }
+            } catch (error) {
+                console.log('Aucun produit sauvegardé, utilisation des produits par défaut');
+            }
+            
+            // Produits par défaut
+            return [
+                {
+                    id: 1,
+                    name: 'Discord Nitro 3 Mois',
+                    price: 3.11,
+                    description: 'Profitez de Discord Nitro pendant 3 mois avec tous les avantages premium. Livraison immédiate après vérification du paiement.',
+                    stock: 25
+                }
+            ];
+        }
+
+        // Fonction pour sauvegarder les produits dans le stockage partagé
+        async function saveProducts(products) {
+            try {
+                await window.storage.set('products', JSON.stringify(products), true);
+                return true;
+            } catch (error) {
+                console.error('Erreur de sauvegarde:', error);
+                showNotification('❌ Erreur de synchronisation', 'error');
+                return false;
+            }
+        }
+
+        // Variable globale pour les produits
+        let products = [];
+
+        async function toggleAdmin() {
             const password = document.getElementById('adminPassword').value;
             if (password === ADMIN_PASSWORD) {
                 isAdmin = true;
@@ -756,7 +783,7 @@
             form.style.display = form.style.display === 'grid' ? 'none' : 'grid';
         }
 
-        function addProduct() {
+        async function addProduct() {
             const name = document.getElementById('productName').value.trim();
             const price = document.getElementById('productPrice').value;
             const description = document.getElementById('productDescription').value.trim();
@@ -780,30 +807,39 @@
                 stock: stock || 0
             });
 
-            document.getElementById('productName').value = '';
-            document.getElementById('productPrice').value = '';
-            document.getElementById('productDescription').value = '';
-            document.getElementById('productStock').value = '10';
+            const saved = await saveProducts(products);
+            if (saved) {
+                document.getElementById('productName').value = '';
+                document.getElementById('productPrice').value = '';
+                document.getElementById('productDescription').value = '';
+                document.getElementById('productStock').value = '10';
 
-            toggleAddProduct();
-            renderProducts();
-            showNotification('✅ Produit ajouté avec succès', 'success');
-        }
-
-        function deleteProduct(id) {
-            if (confirm('❌ Voulez-vous vraiment supprimer ce produit ?')) {
-                products = products.filter(p => p.id !== id);
+                toggleAddProduct();
                 renderProducts();
-                showNotification('🗑️ Produit supprimé', 'success');
+                showNotification('✅ Produit ajouté et synchronisé', 'success');
             }
         }
 
-        function updateStock(id, change) {
+        async function deleteProduct(id) {
+            if (confirm('❌ Voulez-vous vraiment supprimer ce produit ?')) {
+                products = products.filter(p => p.id !== id);
+                const saved = await saveProducts(products);
+                if (saved) {
+                    renderProducts();
+                    showNotification('🗑️ Produit supprimé et synchronisé', 'success');
+                }
+            }
+        }
+
+        async function updateStock(id, change) {
             const product = products.find(p => p.id === id);
             if (product) {
                 product.stock = Math.max(0, product.stock + change);
-                renderProducts();
-                showNotification(`📊 Stock mis à jour: ${product.stock}`, 'success');
+                const saved = await saveProducts(products);
+                if (saved) {
+                    renderProducts();
+                    showNotification(`📊 Stock synchronisé: ${product.stock}`, 'success');
+                }
             }
         }
 
@@ -820,7 +856,7 @@
         }
 
         function openPayPal() {
-            showNotification('💳 Choisissez un PayPal: txllzoid ou onf457 (50% chacun)', 'success');
+            showNotification('💳 Envoyez 50% à chaque PayPal: txllzoid et onf457', 'success');
         }
 
         function closeModal() {
@@ -890,7 +926,6 @@
             `).join('');
         }
 
-        // Animation CSS supplémentaire
         const style = document.createElement('style');
         style.textContent = `
             @keyframes slideInRight {
@@ -916,15 +951,28 @@
         `;
         document.head.appendChild(style);
 
-        // Fermer modal en cliquant à l'extérieur
         document.getElementById('purchaseModal').addEventListener('click', function(e) {
             if (e.target === this) {
                 closeModal();
             }
         });
 
-        // Initialisation
-        renderProducts();
+        // Initialisation - Charger les produits au démarrage
+        async function init() {
+            products = await loadProducts();
+            renderProducts();
+            
+            // Vérifier les mises à jour toutes les 3 secondes
+            setInterval(async () => {
+                const updatedProducts = await loadProducts();
+                if (JSON.stringify(updatedProducts) !== JSON.stringify(products)) {
+                    products = updatedProducts;
+                    renderProducts();
+                }
+            }, 3000);
+        }
+
+        init();
     </script>
 </body>
 </html>
